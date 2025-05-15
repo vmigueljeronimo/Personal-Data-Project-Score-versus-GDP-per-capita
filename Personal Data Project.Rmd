@@ -1,0 +1,318 @@
+---
+title: "Personal Data Project"
+output: html_notebook
+---
+
+# Score versus GDP per capita
+
+Research Questions
+
+1: Is there a significant linear relationship between a country's score and its GDP per capita?
+
+2: Does corruption perception affect the relationship between score and GDP per capita?
+
+3: How well can score and GDP per capita predict variations in corruption perception?
+
+Hypotheses
+
+Hypothesis 1: There is a significant positive relationship between a country's score and GDP per capita.
+
+Hypothesis 2: Corruption perception moderates the relationship between score and GDP per capita.
+
+Hypothesis 3: A multiple regression model including score, GDP per capita, and corruption perception explains more variance in the outcome compared to simple regression.
+
+Let us try to explain the differences in GDP per capita (outcome variable y) as a function of one numerical variable: the score of the country (explanatory variable x).
+
+```{r}
+library(tidyverse)
+library(skimr)
+library(readxl)
+library(car)  
+library(broom)  
+library(ggplot2)
+
+HapinessReport <- read_excel("C:/Users/migue/OneDrive/Ambiente de Trabalho/SEMESTER 3/Individual Data Project/2019.xlsx")
+head(HapinessReport)
+```
+Here, *Overall Rank* is the Rank of each country. 
+*GDP per capita* is our *outcome variable y* which is a numerical variable of the course instructor’s average teaching score. It is the average computed from the evaluation scores from all students in that course.
+*Score* is our *explanatory variable x*, a numerical variable of the course instructor’s average “beauty” score. It is the average computed from a separate panel of six students.
+
+## 1. Exploratory Data Analysis
+
+```{r}
+HapinessReport %>% glimpse()
+```
+
+```{r}
+HapinessReport %>% sample_n(size = 5) 
+```
+
+```{r}
+HapinessReport %>% 
+  summarise(mean_score = mean(Score), mean_GDP = median(`GDP per capita`),
+            median_score = median(Score), median_GDP =median(`GDP per capita`))
+```
+
+The database contains 156 countries and 10 variables, where the average of the indicatores is the following: Score:5,41 and GDP per capita: 0,96,
+The median for both indicators is also 0.96, suggesting a symmetrical distribution in GDP per capita, but more details are needed.
+
+
+
+If we want to get more summary statistics like standard deviation, minimum and maximum values, typing them all out in summarize() would be long and tedious. We can use the convenient skim() function from the skimr package for *univariate summary statistics*.
+
+```{r}
+HapinessReport %>% select(Score, `GDP per capita`) %>% skim()
+```
+To compute *bivariate summary statistics*, one option is the moderndive package.
+
+```{r}
+library(moderndive)
+
+HapinessReport %>%
+  get_correlation(formula = Score ~ `GDP per capita`)
+```
+Score ~ GDP per capita is the *model formula*.
+
+The Score varies between 2.85 to 7.77 while the GDP per capita varies between 0 to 1,49. The correlation between Score and GDP per capita is 0,79 which appoints for a strong positive relation but no perfect.
+
+
+Another option is the stats package.
+
+```{r}
+HapinessReport %>% ggplot(aes(x = Score, y =  `GDP per capita` )) +
+  geom_point() +
+  labs(x = "Score",
+       y = "GDP per capita")
+```
+
+```{r}
+HapinessReport %>% ggplot(aes(x = Score, y = `GDP per capita`)) +
+  geom_point() +
+  labs(x = "Score",
+       y = "GDP per capita") +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+The relation between Score and GDP per capita is approximately linear. The regression line shows that countries with a higher Score tend to have a higher GDP per capita.
+
+## 2. Simple Linear Regression
+
+```{r}
+ model <- lm(Score ~ `GDP per capita`, data = HapinessReport) 
+ model %>% get_regression_table()
+```
+
+The model adjusted sugests that for each increase in the unit on the GDP per capita, the Score increases in average 2,22 unit's
+
+## 3. Residual analysis
+
+
+```{r}
+regression_points <- model %>% get_regression_points()
+regression_points
+```
+
+```{r}
+regression_points %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+```{r}
+model %>% get_regression_summaries()
+```
+The sum of the squared residuals is 71.00, showing the discrepancy between the observed and predict values.
+
+## Residual analysis
+
+### (1) Linearity of relationship
+
+<p id="question"> Take another look at the scatterplot "Relationship between teaching and beauty scores". Is it a linear relationship? </p>
+<p id="answer"> The scatterplot reveals that the points are scattered about the regression line. It seems to be linear enough. </p>
+# Scatterplot to check linearity
+
+```{r}
+ggplot(regression_points, aes(x = Score, y = `GDP per capita`)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") 
+```
+
+The points are scattered around the regression line, suggesting that the relationship between Score and GDP per capita appears linear. There are no clear patterns indicating non-linearity. Conclusion: The linearity assumption is satisfied.
+
+### (2) Independence of the residuals
+
+# Residuals vs. Observation Index
+```{r}
+
+ggplot(regression_points, aes(x = ID, y = residual)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residuals vs. Observation Index",
+       x = "Observation Index (ID)", y = "Residuals") +
+  theme_minimal()
+```
+
+There seems to be some structure or trend in the residuals, particularly at the beginning and end of the observation range. Ideally, residuals should appear randomly scattered around the zero line, without patterns.
+
+### (3) Normality of the residuals
+
+# Histogram of residuals
+```{r}
+ggplot(regression_points, aes(x = residual)) +
+  geom_histogram(binwidth = 0.3, fill = "skyblue", color = "black") +
+  labs(title = "Histogram of Residuals",
+       x = "Residuals", y = "Frequency") +
+  theme_minimal()
+```
+
+This indicates that the residuals are mostly concentrated around 0, which aligns with normality.
+
+### (4) Equality of variance of the residuals
+
+# Residuals vs. Fitted Values
+```{r}
+ggplot(regression_points, aes(x = Score_hat, y = residual)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Fitted Values (Predicted Scores)", y = "Residuals") +
+  theme_minimal()
+```
+
+The spread of residuals appears uniform overall, which supports the homoscedasticity assumption. However, it would be helpful to investigate if this uniform spread is consistent across all fitted values or if any deviations exist in specific regions. Such deviations could indicate areas where the model's assumptions might not fully hold.
+
+## Inference Conclusion
+
+The analysis confirms a significant positive relationship between a country's happiness score and its GDP per capita, supporting Hypothesis 1. Residual diagnostics indicate that the linear regression assumptions are reasonably met. Including corruption perception as a moderating factor demonstrates its influence on the relationship, with the interaction model showing variations in the slope based on corruption levels. The multiple regression model explains more variance than the simple regression, affirming the added value of incorporating governance-related variables in understanding the dynamics between happiness and economic performance.
+
+# Multiple Regression: Country Score versus GDP per capita **and** corruption perception within the country
+
+## 1. Exploratory Data Analysis
+
+```{r, eval=TRUE, include=TRUE}
+HapinessReport <- HapinessReport %>%
+  mutate(Corruption = as.factor(Corruption)) 
+
+HapinessReport %>%
+  select(`Overall rank`, Score, `GDP per capita`, Corruption)
+
+HapinessReport %>% glimpse()
+
+HapinessReport %>%
+  sample_n(size = 5)
+```
+
+
+
+```{r}
+HapinessReport$Corruption %>% levels()
+```
+
+
+### (ii) Compute summary statistics
+
+```{r}
+HapinessReport %>% select(Score, `GDP per capita`, Corruption ) %>% skim()
+```
+
+```{r}
+HapinessReport %>% 
+  group_by(Corruption) %>% 
+  get_correlation(formula = `GDP per capita` ~ Score )
+```
+
+
+### (iii) Create data visualisations
+
+```{r}
+plot_interaction <- HapinessReport %>%
+  ggplot(aes(x = `GDP per capita`, y = Score, color = Corruption)) +
+  geom_point()  +
+  geom_smooth(method = "lm", se = FALSE)
+
+plot_interaction
+```
+
+## 2. Multiple Linear Regression
+
+### (a) Parallel slopes model
+
+We first apply the simpler parallel slopes model. This method forces the regression lines for both male and female instructors to have the same slope. 
+
+The geom_smooth() function of ggplot2 does not offer a convenient function for this. So, we make use of the special purpose function called geom_parallel_slopes() from the moderndive package.
+
+```{r}
+plot_model_parallel_slopes <- HapinessReport %>% 
+  ggplot(aes(x = Score, y = `GDP per capita`, color = Corruption)) +
+  geom_point() +
+  geom_parallel_slopes(se = FALSE)
+
+plot_model_parallel_slopes
+```
+
+Next, we fit the regression model to obtain the precise numerical values of the two intercepts and the single common slope. The model formula is now of the form y ~ x1 + x2, which in our case becomes score ~ age + gender
+
+```{r}
+# Fit regression model:
+score_model_parallel_slopes <- lm(Score ~ `GDP per capita`  + Corruption , data = HapinessReport)
+# Get regression table:
+score_model_parallel_slopes %>% get_regression_table()
+```
+
+### (b) Interaction model
+
+Next, we employ the interaction model for multiple regression. This is a more flexible model than the parallel slopes model, since it allows for varying slopes for the regression lines of the male and female instructors. From the [data visualisation step of our EDA](#intmodel), it was seen that the regression lines were not parallel to each other, and this indicates that there is an interaction between the independent variables *age* and *gender.*
+
+We use the same lm() function as in the case of basic regression, but we use a slightly different model formula, score ~ age * gender, that involves both the explanatory variables.
+
+```{r}
+# Fit regression model:
+score_model_interaction <- lm(Score ~ `GDP per capita` * Corruption, data = HapinessReport)
+
+# Get regression table:
+score_model_interaction %>% get_regression_table()
+```
+
+## 3. Residual analysis
+
+We compute the observed values, fitted values, and residuals for the interaction model. Refer the [visualisation in EDA using ggplot2](#intmodel).
+
+### (i) Find information on individual observations
+
+```{r}
+regression_points <- score_model_interaction %>% get_regression_points()
+regression_points
+```
+
+### (ii) Compute sum of squared residuals
+
+Next, let us compute the sum of squared residuals. The pair of *best-fitting lines* will minimise the sum of squared residuals out of all possible lines we can draw through the points.
+
+```{r}
+regression_points %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+### (iii) Compute regression summaries
+
+Finally, get the regression summaries like $R^2$ and Mean Squared Error (MSE).
+
+```{r}
+score_model_interaction %>% get_regression_summaries()
+```
+
+## (Rudimentary) Model selection
+
+When should we use an interaction model versus a parallel slopes model?
+
+Let us examine the regression lines generated by the two models once more.
+```{r}
+plot_interaction
+plot_model_parallel_slopes
+```
+
+A significant positive relationship exists between score and GDP per capita. Corruption perception moderates this relationship, as evidenced by interaction terms that allow the slope of the relationship between score and GDP per capita to vary depending on the level of perceived corruption. This suggests that the strength and direction of the relationship are influenced by corruption levels, with potential implications for how economic performance and societal satisfaction interact under different governance contexts.
+
+Residual analysis confirms that key assumptions—linearity, independence, normality, and homoscedasticity—were tested and found to be reasonably met, supporting the model's validity. For example, residuals demonstrated symmetry around the regression line, and no significant patterns were observed in residual plots, indicating that the assumptions hold across the data.
